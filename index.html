@@ -1,0 +1,337 @@
+# Fixing the f-string by avoiding triple quotes inside f-string and using concatenation.
+from pathlib import Path
+import base64, html, json
+
+img_path = Path("/mnt/data/4c793132-a255-4fe6-9b4f-30b005530437.png")
+if not img_path.exists():
+    raise FileNotFoundError(f"Image not found at {img_path}")
+
+b64 = base64.b64encode(img_path.read_bytes()).decode('ascii')
+data_uri = "data:image/png;base64," + b64
+
+html_parts = []
+html_parts.append("""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GTA-style Map</title>
+<style>
+  :root{--bg:#0b0b0b;--panel:#111;--muted:#9aa0a6;--accent:#00d1ff;}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#050505 0%, #0b0b0b 100%);color:#ddd;font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .app{display:flex;gap:16px;height:100vh;padding:18px;box-sizing:border-box;}
+  .left{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .map-shell{background:#000;border:1px solid rgba(255,255,255,0.04);box-shadow:0 6px 30px rgba(0,0,0,0.7);width:900px;height:600px;overflow:hidden;position:relative;}
+  .map-inner{transform-origin:0 0;cursor:grab;touch-action:none;display:block;position:absolute;left:0;top:0;}
+  .map-inner.grabbing{cursor:grabbing;}
+  .map-img{display:block;max-width:none;user-select:none;pointer-events:none;}
+  .controls{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:8px;z-index:40;}
+  .btn{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:8px;border-radius:8px;min-width:40px;text-align:center;cursor:pointer;font-weight:600;}
+  .btn:hover{background:rgba(255,255,255,0.04);color:#fff;}
+  .right-panel{width:360px;background:linear-gradient(180deg,#0f0f0f, #0b0b0b);border-left:1px solid rgba(255,255,255,0.03);padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;}
+  h1{margin:0;font-size:20px;letter-spacing:0.4px;}
+  .info{flex:1;overflow:auto;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:8px;border:1px solid rgba(255,255,255,0.02);}
+  .marker{position:absolute;transform:translate(-50%,-100%);z-index:30;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:auto;}
+  .pin{width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.08);}
+  .pin.small{width:28px;height:28px;font-size:12px;}
+  .label{background:rgba(0,0,0,0.6);color:#fff;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);font-size:13px;white-space:nowrap;display:none;}
+  .marker:hover .label{display:block;}
+  .search{display:flex;gap:8px;margin-top:6px;}
+  .input{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:#ddd;flex:1;}
+  .smallmuted{color:var(--muted);font-size:13px;}
+  .footer{font-size:12px;color:var(--muted);}
+  .marker.adding .pin{background:linear-gradient(180deg,#ffd66b,#ff9a3c);}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .toggle{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);cursor:pointer;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="left">
+    <div class="map-shell" id="mapShell">
+      <div class="controls" id="controls">
+        <div class="btn" id="zoomIn">+</div>
+        <div class="btn" id="zoomOut">−</div>
+        <div class="btn" id="reset">Reset</div>
+        <div class="btn" id="addMarkerToggle">Marker</div>
+      </div>
+      <div id="mapInner" class="map-inner" style="left:0;top:0;transform:translate(0px,0px) scale(1)">
+""")
+# embed image tag with data URI
+html_parts.append(f'<img class="map-img" id="mapImg" src="{data_uri}" draggable="false" />')
+html_parts.append("""
+      </div>
+    </div>
+    <div style="width:900px;display:flex;justify-content:space-between;margin-top:12px;color:var(--muted);font-size:13px;">
+      <div class="smallmuted">Klicke "Marker" um Marker per Klick zu setzen. Benutze Mausrad oder Buttons zum Zoomen. Drag zum Verschieben.</div>
+      <div class="smallmuted">Zoom: <span id="zoomVal">100%</span></div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="topbar">
+      <h1>Stadtkarte — Emden (Custom)</h1>
+      <div class="toggle" id="legendToggle">Legende</div>
+    </div>
+
+    <div class="info" id="info">
+      <div style="display:flex;gap:12px;align-items:center;">
+        <input id="searchInput" class="input" placeholder="PLZ/Nummer suchen (z.B. 1)">
+        <button class="btn" id="searchBtn">Suchen</button>
+      </div>
+      <div id="infoContent" style="margin-top:12px;">
+        <div class="smallmuted">Klicke auf einen Marker (oder fahre darüber), um Infos anzuzeigen. Du kannst Marker hinzufügen und bearbeiten.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" id="exportBtn">Export JSON</button>
+      <button class="btn" id="importBtn">Import</button>
+      <input id="fileInput" type="file" style="display:none" accept=".json">
+    </div>
+
+    <div class="footer">Design: Schwarz / GTA-style • Immer alles in einer Datei</div>
+  </div>
+</div>
+
+<script>
+// Basic pan & zoom for the map image
+const mapShell = document.getElementById('mapShell');
+const mapInner = document.getElementById('mapInner');
+const mapImg = document.getElementById('mapImg');
+const zoomVal = document.getElementById('zoomVal');
+
+let scale = 1;
+let originX = 0, originY = 0;
+let isDragging = false, dragStart = {x:0,y:0}, startOrigin={x:0,y:0};
+let addMode = false;
+let markerCounter = 0;
+const markers = [];
+
+// responsive: set mapInner size to image natural size once loaded
+mapImg.addEventListener('load', ()=>{
+  mapInner.style.width = mapImg.naturalWidth + 'px';
+  mapInner.style.height = mapImg.naturalHeight + 'px';
+  // add some sample markers (percent coords)
+  const samples = [
+    [24,26,"Polizei"], [70,80,"Hafen"], [58,33,"Krankenhaus"], [47,57,"Einkaufszentrum"],
+    [30,46,"Park"], [50,25,"Rathaus"], [68,46,"Tankstelle"], [15,80,"Wohngebiet"], [80,22,"Schule"]
+  ];
+  samples.forEach(s=>addMarkerPercent(s[0],s[1], s[2]));
+});
+
+function setTransform(){
+  mapInner.style.transform = `translate(${originX}px, ${originY}px) scale(${scale})`;
+  zoomVal.textContent = Math.round(scale*100) + '%';
+}
+
+mapShell.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  const delta = -e.deltaY;
+  const zoomFactor = delta>0 ? 1.12 : 0.9;
+  // zoom towards mouse pointer
+  const rect = mapShell.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  // compute map coordinates
+  const mx = (mouseX - originX) / scale;
+  const my = (mouseY - originY) / scale;
+  scale *= zoomFactor;
+  // clamp
+  scale = Math.max(0.5, Math.min(4, scale));
+  // update origin so zoom toward pointer
+  originX = mouseX - mx*scale;
+  originY = mouseY - my*scale;
+  setTransform();
+});
+
+mapInner.addEventListener('mousedown', (e)=>{
+  isDragging = true;
+  mapInner.classList.add('grabbing');
+  dragStart = {x:e.clientX, y:e.clientY};
+  startOrigin = {x:originX, y:originY};
+});
+
+window.addEventListener('mousemove', (e)=>{
+  if(!isDragging) return;
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  originX = startOrigin.x + dx;
+  originY = startOrigin.y + dy;
+  setTransform();
+});
+
+window.addEventListener('mouseup', ()=>{
+  isDragging = false;
+  mapInner.classList.remove('grabbing');
+});
+
+// touch support for pan
+mapInner.addEventListener('touchstart', (e)=>{
+  if(e.touches.length===1){
+    isDragging=true;
+    dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    startOrigin={x:originX,y:originY};
+  }
+});
+mapInner.addEventListener('touchmove', (e)=>{
+  if(!isDragging) return;
+  const t = e.touches[0];
+  const dx = t.clientX - dragStart.x;
+  const dy = t.clientY - dragStart.y;
+  originX = startOrigin.x + dx;
+  originY = startOrigin.y + dy;
+  setTransform();
+});
+mapInner.addEventListener('touchend', ()=>{ isDragging=false; });
+
+// buttons
+document.getElementById('zoomIn').addEventListener('click', ()=>{ scale=Math.min(4, scale*1.2); setTransform(); });
+document.getElementById('zoomOut').addEventListener('click', ()=>{ scale=Math.max(0.5, scale/1.2); setTransform(); });
+document.getElementById('reset').addEventListener('click', ()=>{ scale=1; originX=0; originY=0; setTransform(); });
+document.getElementById('addMarkerToggle').addEventListener('click', ()=>{ addMode = !addMode; document.getElementById('addMarkerToggle').style.background = addMode ? 'linear-gradient(180deg,#222,#111)' : ''; });
+
+// markers management
+const mapShellRect = ()=>mapImg.getBoundingClientRect();
+
+function percentToPx(pxPercentX, pxPercentY){
+  // percent coords (0-100) relative to image natural size
+  const w = mapImg.naturalWidth;
+  const h = mapImg.naturalHeight;
+  return {x: (pxPercentX/100)*w, y:(pxPercentY/100)*h};
+}
+
+function addMarkerPercent(px, py, title="Ort"){
+  markerCounter++;
+  const id = markerCounter;
+  const el = document.createElement('div');
+  el.className='marker';
+  el.dataset.id = id;
+  // assign number (postal code)
+  const pin = document.createElement('div');
+  pin.className='pin';
+  pin.textContent = id;
+  const label = document.createElement('div');
+  label.className='label';
+  label.textContent = title + " — PLZ: " + id;
+  el.appendChild(pin);
+  el.appendChild(label);
+  // position
+  const pos = percentToPx(px,py);
+  el.style.left = pos.x + 'px';
+  el.style.top = pos.y + 'px';
+  // event
+  el.addEventListener('click', (ev)=>{
+    ev.stopPropagation();
+    showInfo(id);
+  });
+  mapInner.appendChild(el);
+  markers.push({id,px,py,title,el});
+  return id;
+}
+
+function showInfo(id){
+  const m = markers.find(x=>x.id==id);
+  if(!m) return;
+  const info = document.getElementById('infoContent');
+  info.innerHTML = `<h3 style="margin:0 0 6px 0">${escapeHtml(m.title)}</h3>
+    <div class="smallmuted">PLZ / Nummer: <strong>${m.id}</strong></div>
+    <div style="margin-top:8px;">Koordinaten (Prozent): ${m.px.toFixed(1)}%, ${m.py.toFixed(1)}%</div>
+    <div style="margin-top:8px;"><button class="btn" id="centerBtn">Zentrieren</button> <button class="btn" id="delBtn">Löschen</button></div>`;
+  document.getElementById('centerBtn').addEventListener('click', ()=>centerOnMarker(m));
+  document.getElementById('delBtn').addEventListener('click', ()=>deleteMarker(m));
+  // highlight marker visually
+  markers.forEach(x=>x.el.querySelector('.pin').style.boxShadow='0 6px 18px rgba(0,0,0,0.6)');
+  m.el.querySelector('.pin').style.boxShadow='0 6px 28px rgba(255,210,130,0.7)';
+}
+
+function centerOnMarker(m){
+  // compute marker px in current scale and center the mapShell on it
+  const rect = mapShell.getBoundingClientRect();
+  const pt = percentToPx(m.px, m.py);
+  originX = rect.width/2 - pt.x*scale;
+  originY = rect.height/2 - pt.y*scale;
+  setTransform();
+}
+
+function deleteMarker(m){
+  if(!confirm('Marker ' + m.id + ' löschen?')) return;
+  m.el.remove();
+  const idx = markers.findIndex(x=>x.id==m.id);
+  if(idx>=0) markers.splice(idx,1);
+  document.getElementById('infoContent').innerHTML = '<div class="smallmuted">Marker gelöscht.</div>';
+}
+
+// click on map to add marker
+mapShell.addEventListener('click', (e)=>{
+  if(!addMode) return;
+  const rect = mapImg.getBoundingClientRect();
+  // convert click coords to image natural coords
+  const clickX = (e.clientX - rect.left - originX) / scale;
+  const clickY = (e.clientY - rect.top - originY) / scale;
+  const px = (clickX / mapImg.naturalWidth) * 100;
+  const py = (clickY / mapImg.naturalHeight) * 100;
+  const title = prompt('Name des Ortes für PLZ ' + (markerCounter+1) + ' (optional):','Gebäude');
+  addMarkerPercent(px,py, title || 'Gebäude');
+});
+
+// search by PLZ/number
+document.getElementById('searchBtn').addEventListener('click', ()=>{
+  const q = document.getElementById('searchInput').value.trim();
+  if(!q) return;
+  const id = parseInt(q,10);
+  if(isNaN(id)) return alert('Bitte eine Nummer eingeben.');
+  const m = markers.find(x=>x.id==id);
+  if(!m) return alert('Keine PLZ/Nummer gefunden: ' + id);
+  showInfo(m.id);
+  centerOnMarker(m);
+});
+
+// export/import
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const data = markers.map(m=>({id:m.id,px:m.px,py:m.py,title:m.title}));
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='markers.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', ()=>{document.getElementById('fileInput').click();});
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader(); reader.onload = ()=>{
+    try{
+      const arr = JSON.parse(reader.result);
+      // clear existing markers
+      markers.slice().forEach(m=>{m.el.remove();});
+      markers.length = 0;
+      markerCounter = 0;
+      arr.forEach(it=>addMarkerPercent(it.px, it.py, it.title || 'Gebäude'));
+      alert('Import abgeschlossen: ' + arr.length + ' Marker.');
+    }catch(err){alert('Fehler beim Import: ' + err);}
+  }; reader.readAsText(f);
+});
+
+function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// convenience: fit image to container on small screens
+function fitToShell(){
+  const shellRect = mapShell.getBoundingClientRect();
+  const w = mapImg.naturalWidth;
+  const h = mapImg.naturalHeight;
+  const scaleToFit = Math.min(shellRect.width / w, shellRect.height / h);
+  if(scaleToFit < 1){ scale = scaleToFit; originX = (shellRect.width - w*scale)/2; originY = (shellRect.height - h*scale)/2; setTransform(); }
+}
+window.addEventListener('resize', ()=>fitToShell());
+
+// helper to place markers programmatically (used on load)
+</script>
+</body>
+</html>
+""")
+
+full_html = "".join(html_parts)
+out_path = Path("/mnt/data/gta_map_singlefile.html")
+out_path.write_text(full_html, encoding='utf-8')
+print("Wrote HTML to:", out_path)
+print("\n[Download the HTML file](sandbox:/mnt/data/gta_map_singlefile.html)")
