@@ -3,159 +3,568 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GTA Map</title>
-
+<title>Spieltafel — Live Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
-body{
-    margin:0;
-    background:#0a0a0a;
-    overflow:hidden;
-    font-family:Arial, sans-serif;
-}
+  :root{
+    --bg: #14171b;
+    --bg-deep: #0e1013;
+    --panel: #1c2126;
+    --panel-2: #21272d;
+    --border: #2b323a;
+    --text: #e9e6df;
+    --text-dim: #8b929b;
+    --amber: #f2a93b;
+    --amber-glow: rgba(242,169,59,.35);
+    --teal: #52d1c3;
+    --teal-glow: rgba(82,209,195,.35);
+    --green: #5fbf77;
+    --red: #e2554b;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(1200px 600px at 20% -10%, #1a1f25 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+  }
+  ::selection{ background: var(--amber); color:#1a1305; }
 
-#mapContainer{
-    width:100vw;
-    height:100vh;
-    position:relative;
-    overflow:hidden;
-    cursor:grab;
-}
+  /* ---------- Topbar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width: 30px; height: 30px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--amber), #c97c1c);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono', monospace; font-weight:700; color:#1a1305; font-size:14px;
+  }
+  .brand-text h1{ font-size: 16px; margin:0; font-weight:600; letter-spacing:.2px; }
+  .brand-text span{ font-size: 12px; color: var(--text-dim); font-family:'JetBrains Mono',monospace; }
+  .status{ display:flex; align-items:center; gap:18px; font-size:13px; color: var(--text-dim); }
+  .status-dot-wrap{ display:flex; align-items:center; gap:8px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background: var(--green); box-shadow: 0 0 0 0 rgba(95,191,119,.6); animation: pulse 2s infinite; }
+  .dot.err{ background: var(--red); animation: none; box-shadow:none; }
+  @keyframes pulse{
+    0%{ box-shadow: 0 0 0 0 rgba(95,191,119,.55); }
+    70%{ box-shadow: 0 0 0 8px rgba(95,191,119,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(95,191,119,0); }
+  }
 
-#mapImage{
-    position:absolute;
-    transform-origin:0 0;
-    user-select:none;
-    pointer-events:none;
-}
+  /* ---------- Error banner ---------- */
+  .error-banner{
+    display:none;
+    max-width: 1180px; margin: 16px auto 0; padding: 12px 18px;
+    background: rgba(226,85,75,.10); border: 1px solid rgba(226,85,75,.4);
+    border-radius: 8px; color: #f3b3ad; font-size: 13px;
+    align-items:flex-start; gap: 10px;
+  }
+  .error-banner.show{ display:flex; }
+  .error-banner .ic{ font-size: 15px; line-height: 1.3; }
+  .error-banner ul{ margin: 4px 0 0; padding-left: 18px; }
+  .error-banner strong{ color: #f7cac6; }
 
-.marker{
-    position:absolute;
-    width:30px;
-    height:30px;
-    border-radius:50%;
-    background:white;
-    color:black;
-    font-weight:bold;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    transform:translate(-50%, -100%);
-    cursor:pointer;
-    box-shadow:0 0 12px black;
-}
+  /* ---------- Layout ---------- */
+  main{ padding: 10px 28px 28px; max-width: 1180px; margin: 0 auto; }
+  .grid-top{
+    display:grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 18px; margin-bottom: 18px;
+  }
+  @media (max-width: 860px){ .grid-top{ grid-template-columns: 1fr; } }
 
-.marker:hover{
-    background:#00ff99;
-}
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card.live-card{ padding-bottom: 18px; }
+  .card-label{
+    font-size: 12.5px; color: var(--text-dim); font-weight: 500; letter-spacing: .3px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .label-left{ display:flex; align-items:center; gap:8px; }
+  .live-chip{
+    display:flex; align-items:center; gap:5px; font-size: 10.5px; font-weight:700;
+    color: var(--green); letter-spacing: .4px; font-family:'JetBrains Mono',monospace;
+  }
+  .live-chip .dot{ width:6px; height:6px; }
+  .expand-btn{
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 6px; width: 26px; height:26px; cursor:pointer; font-size: 13px;
+    display:flex; align-items:center; justify-content:center; transition: border-color .15s, color .15s;
+  }
+  .expand-btn:hover{ border-color: var(--amber); color: var(--amber); }
 
-#infoBox{
-    position:absolute;
-    right:20px;
-    top:20px;
-    background:#111;
-    padding:15px;
-    border-radius:8px;
-    width:220px;
-    border:1px solid #222;
-    color:white;
-}
+  /* ---------- Board frame (recessed panel behind the flap digits) ---------- */
+  .board-frame{
+    margin-top: 14px; padding: 16px 14px;
+    background: linear-gradient(180deg, #101317, #171b20);
+    border: 1px solid #2a3138;
+    border-radius: 8px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center;
+    transition: box-shadow .3s ease;
+  }
+  .board-frame.amber-glow{ box-shadow: inset 0 2px 6px rgba(0,0,0,.45), 0 0 22px var(--amber-glow); }
+  .board-frame.teal-glow{ box-shadow: inset 0 2px 6px rgba(0,0,0,.45), 0 0 22px var(--teal-glow); }
+
+  .flap-row{ display:flex; gap: 5px; }
+
+  /* ---------- Flap digit tile ---------- */
+  .flap-digit{
+    perspective: 240px;
+    position: relative;
+    width: 26px; height: 38px;
+    border-radius: 5px;
+    background: linear-gradient(180deg, #333b43, #1c2127);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 2px 3px rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .flap-digit::after{
+    content:""; position:absolute; left:0; right:0; top:50%; height:1px;
+    background: rgba(0,0,0,.55); transform: translateY(-.5px);
+  }
+  .flap-digit .inner{ display:inline-block; transform-style: preserve-3d; will-change: transform; font-size: 20px; color: var(--amber); }
+  .flap-digit.teal .inner{ color: var(--teal); }
+  .flap-digit.flip .inner{ animation: flipDigit .42s cubic-bezier(.55,.05,.45,.95); }
+  @keyframes flipDigit{
+    0%{ transform: rotateX(0deg); filter: brightness(1); }
+    48%{ transform: rotateX(-96deg); filter: brightness(1.6); }
+    50%{ transform: rotateX(-96deg); filter: brightness(1.6); }
+    100%{ transform: rotateX(0deg); filter: brightness(1); }
+  }
+  .flap-sep{ align-self:center; font-size: 20px; color: var(--text-dim); font-weight:700; width: 10px; text-align:center; }
+
+  /* size variants */
+  .flap-digit.huge{ width: min(15vw,130px); height: min(21vw,182px); border-radius: 14px; }
+  .flap-digit.huge .inner{ font-size: min(13vw,150px); }
+  .flap-sep.huge{ font-size: min(13vw,150px); width: min(4vw,40px); }
+
+  .unit-label{ font-size: 12px; color: var(--text-dim); font-family:'JetBrains Mono',monospace; margin-top: 12px; text-align:center; }
+
+  /* ---------- Votes card ---------- */
+  .votes-row{ display:flex; align-items:center; gap: 22px; margin-top: 14px; }
+  .vote-stat{ display:flex; flex-direction:column; gap:2px; }
+  .vote-stat .v-num{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size: 20px; }
+  .vote-stat.like .v-num{ color: var(--green); }
+  .vote-stat.dislike .v-num{ color: var(--red); }
+  .vote-stat .v-tag{ font-size: 11px; color: var(--text-dim); }
+  .ratio-bar{
+    margin-top: 16px; height: 8px; border-radius: 5px; overflow:hidden;
+    background: var(--red); display:flex;
+  }
+  .ratio-bar .fill{ background: var(--green); height:100%; transition: width .6s ease; }
+
+  /* ---------- Chart panel ---------- */
+  .chart-panel{
+    background: var(--panel); border:1px solid var(--border); border-radius: var(--radius);
+    padding: 20px 22px 12px;
+  }
+  .chart-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 14px; }
+  .chart-head h2{ font-size: 14px; margin:0; font-weight: 600; }
+  .chart-head .note{ font-size: 11.5px; color: var(--text-dim); }
+  .chart-wrap{ height: 260px; position: relative; }
+  .chart-fallback{ display:none; color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align:center; }
+
+  /* ---------- Fullscreen ---------- */
+  .fullscreen{
+    position: fixed; inset:0; background: var(--bg-deep);
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    z-index: 50;
+  }
+  .fullscreen.active{ display:flex; }
+  .fs-close{
+    position:absolute; top: 22px; right: 26px;
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    padding: 8px 14px; border-radius: 7px; cursor:pointer; font-family:'Space Grotesk',sans-serif; font-size: 13px;
+    transition: border-color .15s, color .15s;
+  }
+  .fs-close:hover{ border-color: var(--amber); color: var(--amber); }
+  .fs-status{ position:absolute; top: 26px; left: 28px; display:flex; align-items:center; gap:8px; font-size:12.5px; color: var(--text-dim); font-family:'JetBrains Mono',monospace; }
+  .fs-board{
+    padding: 26px 22px; border-radius: 16px;
+    background: linear-gradient(180deg, #101317, #171b20);
+    border: 1px solid #2a3138;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,.5);
+    transition: box-shadow .3s ease;
+  }
+  .fs-board.amber-glow{ box-shadow: inset 0 2px 10px rgba(0,0,0,.5), 0 0 60px var(--amber-glow); }
+  .fs-board.teal-glow{ box-shadow: inset 0 2px 10px rgba(0,0,0,.5), 0 0 60px var(--teal-glow); }
+  .fs-flap-row{ display:flex; gap: 12px; }
+  .fs-caption{ margin-top: 26px; font-size: 15px; letter-spacing: .3px; color: var(--text-dim); font-weight: 500; }
+  .fs-delta{ margin-top: 8px; font-family:'JetBrains Mono',monospace; font-size: 13px; color: var(--text-dim); min-height: 18px; }
+  .fs-delta.up{ color: var(--green); }
+  .fs-delta.down{ color: var(--red); }
+  .fs-error{ margin-top: 14px; font-size: 12.5px; color: #f3b3ad; max-width: 380px; text-align:center; display:none; }
+  .fs-error.show{ display:block; }
+
+  footer{ text-align:center; color: var(--text-dim); font-size: 11.5px; padding: 10px 0 30px; }
+  footer code{ color:#a9afb6; }
 </style>
 </head>
 <body>
 
-<div id="mapContainer">
-    <!-- HIER KOMMT DEIN BILD REIN -->
-    <img id="mapImage" src="map.png">
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">RX</div>
+    <div class="brand-text">
+      <h1>Spieltafel</h1>
+      <span>Universe 12716055617</span>
+    </div>
+  </div>
+  <div class="status">
+    <span id="lastUpdate">wird geladen…</span>
+    <div class="status-dot-wrap"><div class="dot" id="statusDot"></div><span id="statusText">Live</span></div>
+  </div>
 </div>
 
-<div id="infoBox">
-    <b>Gebäude Info</b>
-    <div id="infoContent">Klicke auf eine Nummer</div>
+<div class="error-banner" id="errorBanner">
+  <div class="ic">⚠</div>
+  <div>
+    <strong>Verbindung zu Roblox gestört</strong> — die letzten Werte werden weiter angezeigt.
+    <ul id="errorList"></ul>
+  </div>
 </div>
 
+<main>
+  <div class="grid-top">
+
+    <div class="card live-card">
+      <div class="card-label">
+        <div class="label-left">
+          <span>SPIELER GERADE ONLINE</span>
+          <span class="live-chip"><span class="dot"></span>LIVE</span>
+        </div>
+        <button class="expand-btn" data-target="fs-ccu" title="Vollbild">⤢</button>
+      </div>
+      <div class="board-frame" id="ccuBoard">
+        <div class="flap-row" id="ccuDigits"></div>
+      </div>
+      <div class="unit-label">CCU · aktualisiert alle 10s</div>
+    </div>
+
+    <div class="card live-card">
+      <div class="card-label">
+        <div class="label-left">
+          <span>FAVORITEN</span>
+          <span class="live-chip" style="color:var(--teal)"><span class="dot" style="background:var(--teal)"></span>LIVE</span>
+        </div>
+        <button class="expand-btn" data-target="fs-fav" title="Vollbild">⤢</button>
+      </div>
+      <div class="board-frame" id="favBoard">
+        <div class="flap-row" id="favDigits"></div>
+      </div>
+      <div class="unit-label">Gesamtzahl · aktualisiert alle 10s</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label"><span>BEWERTUNGEN</span></div>
+      <div class="votes-row">
+        <div class="vote-stat like"><div class="v-num" id="likePct">–</div><div class="v-tag">Positiv</div></div>
+        <div class="vote-stat"><div class="v-num" id="likeCount" style="color:var(--text-dim)">–</div><div class="v-tag">👍 Likes</div></div>
+        <div class="vote-stat dislike"><div class="v-num" id="dislikeCount">–</div><div class="v-tag">👎 Dislikes</div></div>
+      </div>
+      <div class="ratio-bar"><div class="fill" id="ratioFill" style="width:50%"></div></div>
+    </div>
+
+  </div>
+
+  <div class="chart-panel">
+    <div class="chart-head">
+      <h2>Spielerverlauf heute</h2>
+      <span class="note">Aufzeichnung läuft seit dem Öffnen dieser Seite</span>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="ccuChart"></canvas>
+      <div class="chart-fallback" id="chartFallback">Diagramm konnte nicht geladen werden (Chart.js nicht erreichbar).</div>
+    </div>
+  </div>
+
+  <footer>Datenquelle: <code>games.roproxy.com</code> · kein API-Key · Abfrage alle 10 Sekunden</footer>
+</main>
+
+<!-- Fullscreen: CCU -->
+<div class="fullscreen" id="fs-ccu">
+  <button class="fs-close" data-close>✕ Schließen</button>
+  <div class="fs-status"><div class="dot" id="fsDotCcu"></div><span id="fsTextCcu">Live</span></div>
+  <div class="fs-board amber-glow" id="ccuBoardBig">
+    <div class="fs-flap-row" id="ccuDigitsBig"></div>
+  </div>
+  <div class="fs-caption">Spieler gerade online</div>
+  <div class="fs-delta" id="ccuDelta"></div>
+  <div class="fs-error" id="ccuFsError"></div>
+</div>
+
+<!-- Fullscreen: Favorites -->
+<div class="fullscreen" id="fs-fav">
+  <button class="fs-close" data-close>✕ Schließen</button>
+  <div class="fs-status"><div class="dot" id="fsDotFav"></div><span id="fsTextFav">Live</span></div>
+  <div class="fs-board teal-glow" id="favBoardBig">
+    <div class="fs-flap-row" id="favDigitsBig"></div>
+  </div>
+  <div class="fs-caption">Favoriten insgesamt</div>
+  <div class="fs-delta" id="favDelta"></div>
+  <div class="fs-error" id="favFsError"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
+(function(){
+  "use strict";
 
-const map = document.getElementById("mapImage");
-const container = document.getElementById("mapContainer");
-const infoContent = document.getElementById("infoContent");
+  const UNIVERSE_ID = "12716055617";
+  const POLL_MS = 10000;
 
-let scale = 1;
-let originX = 0;
-let originY = 0;
-let isDragging = false;
-let startX, startY;
-let markerId = 0;
-let markers = [];
+  const EP_GAME = `https://games.roproxy.com/v1/games?universeIds=${UNIVERSE_ID}`;
+  const EP_VOTES = `https://games.roproxy.com/v1/games/votes?universeIds=${UNIVERSE_ID}`;
+  const EP_FAVS = `https://games.roproxy.com/v1/games/${UNIVERSE_ID}/favorites/count`;
 
-function update(){
-    map.style.transform =
-        `translate(${originX}px, ${originY}px) scale(${scale})`;
+  const fmt = n => n.toLocaleString('de-DE');
 
-    markers.forEach(m=>{
-        m.el.style.left =
-            (originX + m.x * scale) + "px";
-        m.el.style.top =
-            (originY + m.y * scale) + "px";
+  // ---------- Flap digit renderer ----------
+  const digitState = new Map();
+
+  function renderFlap(containerEl, value, colorClass, boardEls){
+    const str = fmt(value);
+    const key = containerEl.id;
+    const prev = digitState.get(key);
+    digitState.set(key, str);
+
+    const sizeClass = containerEl.classList.contains('fs-flap-row') ? 'huge' : '';
+
+    if (prev === undefined || prev.length !== str.length) {
+      containerEl.innerHTML = "";
+      for (const ch of str) containerEl.appendChild(makeUnit(ch, sizeClass, colorClass));
+      return;
+    }
+
+    const nodes = Array.from(containerEl.children);
+    let changed = false;
+    for (let i = 0; i < str.length; i++){
+      const ch = str[i];
+      const node = nodes[i];
+      const isSep = ch === '.' || ch === ',';
+      if (node.dataset.ch !== ch) {
+        changed = true;
+        node.dataset.ch = ch;
+        if (!isSep) {
+          const span = node.querySelector('.inner');
+          node.classList.remove('flip');
+          void node.offsetWidth;
+          node.classList.add('flip');
+          setTimeout(() => { span.textContent = ch; }, 200);
+          setTimeout(() => { node.classList.remove('flip'); }, 440);
+        } else {
+          node.textContent = ch;
+        }
+      }
+    }
+    if (changed && boardEls) {
+      boardEls.forEach(b => {
+        if (!b) return;
+        b.classList.add(colorClass === 'teal' ? 'teal-glow' : 'amber-glow');
+        setTimeout(() => {}, 0);
+      });
+    }
+  }
+
+  function makeUnit(ch, sizeClass, colorClass){
+    const isSep = ch === '.' || ch === ',';
+    const wrap = document.createElement('div');
+    wrap.dataset.ch = ch;
+    wrap.className = isSep ? `flap-sep ${sizeClass}` : `flap-digit ${sizeClass} ${colorClass||''}`;
+    if (isSep){
+      wrap.textContent = ch;
+    } else {
+      const inner = document.createElement('span');
+      inner.className = 'inner';
+      inner.textContent = ch;
+      wrap.appendChild(inner);
+    }
+    return wrap;
+  }
+
+  // ---------- State ----------
+  let lastCcu = null, lastFav = null;
+  const chartLabels = [];
+  const chartData = [];
+
+  // ---------- Chart (guarded: works even if Chart.js failed to load) ----------
+  let chart = null;
+  function initChart(){
+    if (typeof Chart === 'undefined') {
+      document.getElementById('chartFallback').style.display = 'block';
+      return;
+    }
+    const ctx = document.getElementById('ccuChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0,0,0,260);
+    gradient.addColorStop(0, 'rgba(242,169,59,0.35)');
+    gradient.addColorStop(1, 'rgba(242,169,59,0)');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: chartLabels, datasets: [{
+        data: chartData, borderColor: '#f2a93b', backgroundColor: gradient,
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#f2a93b', tension: 0.35, fill: true,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+        interaction: { intersect: false, mode: 'index' },
+        scales: {
+          x: { grid: { color: '#242a30' }, ticks: { color: '#8b929b', maxTicksLimit: 8, font: { family: 'JetBrains Mono', size: 10 } } },
+          y: { grid: { color: '#242a30' }, ticks: { color: '#8b929b', font: { family: 'JetBrains Mono', size: 10 } }, beginAtZero: true }
+        },
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c2126', borderColor: '#2b323a', borderWidth: 1, titleFont:{family:'JetBrains Mono'}, bodyFont:{family:'JetBrains Mono'} } }
+      }
     });
-}
+  }
 
-container.addEventListener("wheel", e=>{
-    e.preventDefault();
-    const zoom = e.deltaY < 0 ? 1.1 : 0.9;
-    scale *= zoom;
-    scale = Math.max(0.5, Math.min(4, scale));
-    update();
-});
+  function pushChartPoint(value){
+    const now = new Date();
+    const label = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    chartLabels.push(label);
+    chartData.push(value);
+    if (chartLabels.length > 240) { chartLabels.shift(); chartData.shift(); }
+    if (chart) chart.update('none');
+  }
 
-container.addEventListener("mousedown", e=>{
-    isDragging = true;
-    startX = e.clientX - originX;
-    startY = e.clientY - originY;
-});
+  // ---------- Status / error banner ----------
+  const banner = document.getElementById('errorBanner');
+  const errorList = document.getElementById('errorList');
 
-window.addEventListener("mousemove", e=>{
-    if(!isDragging) return;
-    originX = e.clientX - startX;
-    originY = e.clientY - startY;
-    update();
-});
+  function setStatus(errors){
+    const ok = errors.length === 0;
+    const dots = [document.getElementById('statusDot'), document.getElementById('fsDotCcu'), document.getElementById('fsDotFav')];
+    const texts = [document.getElementById('statusText'), document.getElementById('fsTextCcu'), document.getElementById('fsTextFav')];
+    dots.forEach(d => d && d.classList.toggle('err', !ok));
+    texts.forEach(t => t && (t.textContent = ok ? 'Live' : 'Fehler'));
+    document.getElementById('lastUpdate').textContent = ok
+      ? 'Aktualisiert ' + new Date().toLocaleTimeString('de-DE')
+      : 'Letzte Aktualisierung teilweise fehlgeschlagen';
 
-window.addEventListener("mouseup", ()=>{
-    isDragging = false;
-});
+    if (ok) {
+      banner.classList.remove('show');
+      errorList.innerHTML = '';
+    } else {
+      banner.classList.add('show');
+      errorList.innerHTML = errors.map(e => `<li>${e}</li>`).join('');
+    }
 
-container.addEventListener("click", e=>{
-    if(e.target !== container) return;
+    const ccuErrText = errors.find(e => e.startsWith('Spieler'));
+    const favErrText = errors.find(e => e.startsWith('Favoriten'));
+    const ccuFsErr = document.getElementById('ccuFsError');
+    const favFsErr = document.getElementById('favFsError');
+    ccuFsErr.textContent = ccuErrText || '';
+    ccuFsErr.classList.toggle('show', !!ccuErrText);
+    favFsErr.textContent = favErrText || '';
+    favFsErr.classList.toggle('show', !!favErrText);
+  }
 
-    const rect = map.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+  function updateDelta(el, prev, next){
+    if (prev === null || next === null) { el.textContent = ''; el.className = 'fs-delta'; return; }
+    const diff = next - prev;
+    if (diff === 0){ el.textContent = '± 0 seit letzter Abfrage'; el.className = 'fs-delta'; return; }
+    el.textContent = (diff > 0 ? '▲ +' : '▼ ') + fmt(diff) + ' seit letzter Abfrage';
+    el.className = 'fs-delta ' + (diff > 0 ? 'up' : 'down');
+  }
 
-    markerId++;
-    createMarker(x,y,"Gebäude");
-});
+  async function fetchJson(url){
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
 
-function createMarker(x,y,name){
-    const div = document.createElement("div");
-    div.className = "marker";
-    div.innerText = markerId;
+  // ---------- Fetch cycle (each endpoint independent so one failure doesn't block the others) ----------
+  async function poll(){
+    const errors = [];
+    let playing = lastCcu, up = null, down = null, favorites = lastFav;
 
-    container.appendChild(div);
+    try {
+      const gameRes = await fetchJson(EP_GAME);
+      const entry = gameRes?.data?.[0];
+      if (!entry) throw new Error('Kein Spiel für diese Universe-ID gefunden');
+      playing = entry.playing ?? 0;
+    } catch (err) {
+      errors.push('Spieler-API nicht erreichbar (' + err.message + ')');
+    }
 
-    const markerObj = {id:markerId, x,y,name, el:div};
-    markers.push(markerObj);
+    try {
+      const votesRes = await fetchJson(EP_VOTES);
+      const entry = votesRes?.data?.[0];
+      if (!entry) throw new Error('keine Bewertungsdaten erhalten');
+      up = entry.upVotes ?? 0;
+      down = entry.downVotes ?? 0;
+    } catch (err) {
+      errors.push('Bewertungs-API nicht erreichbar (' + err.message + ')');
+    }
 
-    div.onclick = (e)=>{
-        e.stopPropagation();
-        infoContent.innerHTML = `
-            <b>${name}</b><br>
-            PLZ: ${markerObj.id}
-        `;
-    };
+    try {
+      const favRes = await fetchJson(EP_FAVS);
+      if (favRes?.favoritesCount === undefined) throw new Error('keine Favoriten-Daten erhalten');
+      favorites = favRes.favoritesCount;
+    } catch (err) {
+      errors.push('Favoriten-API nicht erreichbar (' + err.message + ')');
+    }
 
-    update();
-}
+    if (playing !== null && playing !== undefined) {
+      renderFlap(document.getElementById('ccuDigits'), playing, '', [document.getElementById('ccuBoard')]);
+      renderFlap(document.getElementById('ccuDigitsBig'), playing, '', [document.getElementById('ccuBoardBig')]);
+      pushChartPoint(playing);
+    }
+    if (favorites !== null && favorites !== undefined) {
+      renderFlap(document.getElementById('favDigits'), favorites, 'teal', [document.getElementById('favBoard')]);
+      renderFlap(document.getElementById('favDigitsBig'), favorites, 'teal', [document.getElementById('favBoardBig')]);
+    }
+    if (up !== null && down !== null) {
+      const total = up + down;
+      const pct = total > 0 ? Math.round((up / total) * 100) : 0;
+      document.getElementById('likePct').textContent = pct + '%';
+      document.getElementById('likeCount').textContent = fmt(up);
+      document.getElementById('dislikeCount').textContent = fmt(down);
+      document.getElementById('ratioFill').style.width = pct + '%';
+    }
 
+    updateDelta(document.getElementById('ccuDelta'), lastCcu, playing ?? null);
+    updateDelta(document.getElementById('favDelta'), lastFav, favorites ?? null);
+    lastCcu = playing ?? lastCcu;
+    lastFav = favorites ?? lastFav;
+
+    setStatus(errors);
+  }
+
+  initChart();
+  poll();
+  setInterval(poll, POLL_MS);
+
+  // ---------- Fullscreen toggling ----------
+  document.querySelectorAll('.expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target).classList.add('active');
+    });
+  });
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.fullscreen').classList.remove('active');
+    });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){
+      document.querySelectorAll('.fullscreen.active').forEach(f => f.classList.remove('active'));
+    }
+  });
+})();
 </script>
 </body>
 </html>
