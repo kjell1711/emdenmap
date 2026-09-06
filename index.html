@@ -338,7 +338,7 @@
   const UNIVERSE_ID = "12716055617";
   const POLL_MS = 10000;
   const FETCH_TIMEOUT_MS = 8000;
-  const PROXY_COOLDOWN_MS = 45000; // after a 429/hard failure, skip that proxy for a while
+  const PROXY_COOLDOWN_MS = 60000; // after a 429, skip that proxy for a while
 
   // Real Roblox endpoints (these are the source of truth; a proxy is only needed for CORS)
   const REAL_GAME  = `https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}`;
@@ -349,9 +349,9 @@
   // for it and tries that one first, so under normal conditions there's only ever 1 request.
   const PROXIES = [
     { name: "RoProxy",     build: (u) => u.replace("games.roblox.com", "games.roproxy.com"), parse: (t) => JSON.parse(t) },
+    { name: "CodeTabs",    build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
     { name: "AllOrigins",  build: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
-    { name: "CorsProxy",   build: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
-    { name: "ThingProxy",  build: (u) => `https://thingproxy.freeboard.io/fetch/${u}`, parse: (t) => JSON.parse(t) },
+    { name: "CorsFallback",build: (u) => `https://corsproxy.org/?${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
   ];
 
   const cooldownUntil = Object.create(null); // proxyName -> timestamp
