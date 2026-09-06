@@ -339,6 +339,7 @@
   const POLL_MS = 10000;
   const FETCH_TIMEOUT_MS = 8000;
   const PROXY_COOLDOWN_MS = 60000; // after a 429, skip that proxy for a while
+  const STAGGER_MS = 250; // kleiner Versatz zwischen den 3 Requests, um Bursts zu vermeiden
 
   // Real Roblox endpoints (these are the source of truth; a proxy is only needed for CORS)
   const REAL_GAME  = `https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}`;
@@ -348,10 +349,9 @@
   // Proxy chain, tried in order. Each endpoint remembers which proxy last worked
   // for it and tries that one first, so under normal conditions there's only ever 1 request.
   const PROXIES = [
+    { name: "AllOrigins",  build: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
     { name: "RoProxy",     build: (u) => u.replace("games.roblox.com", "games.roproxy.com"), parse: (t) => JSON.parse(t) },
     { name: "CodeTabs",    build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
-    { name: "AllOrigins",  build: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
-    { name: "CorsFallback",build: (u) => `https://corsproxy.org/?${encodeURIComponent(u)}`, parse: (t) => JSON.parse(t) },
   ];
 
   const cooldownUntil = Object.create(null); // proxyName -> timestamp
@@ -567,8 +567,10 @@
     ids.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = text ? `Quelle: <b>${text}</b>` : ''; });
   }
 
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
   // ---------- Fetch cycle ----------
-  async function poll(){
+  async function pollViaProxies(){
     const errors = [];
     let playing = lastCcu, up = null, down = null, favorites = lastFav;
     let usedFallback = false;
@@ -584,6 +586,8 @@
       errors.push('Spieler-API nicht erreichbar — ' + err.message);
     }
 
+    await sleep(STAGGER_MS);
+
     try {
       const { json, proxyName } = await fetchWithFailover('votes', REAL_VOTES);
       const entry = json?.data?.[0];
@@ -596,6 +600,8 @@
       errors.push('Bewertungs-API nicht erreichbar — ' + err.message);
     }
 
+    await sleep(STAGGER_MS);
+
     try {
       const { json, proxyName } = await fetchWithFailover('fav', REAL_FAVS);
       if (json?.favoritesCount === undefined) throw new Error('keine Favoriten-Daten erhalten');
@@ -606,6 +612,14 @@
       errors.push('Favoriten-API nicht erreichbar — ' + err.message);
     }
 
+    applyResult({ playing, up, down, favorites, errors, usedFallback });
+  }
+
+  function poll(){
+    return pollViaProxies();
+  }
+
+  function applyResult({ playing, up, down, favorites, errors, usedFallback }){
     if (playing !== null && playing !== undefined) {
       renderFlap(document.getElementById('ccuDigits'), playing, '', [document.getElementById('ccuBoard')]);
       renderFlap(document.getElementById('ccuDigitsBig'), playing, '', [document.getElementById('ccuBoardBig')]);
